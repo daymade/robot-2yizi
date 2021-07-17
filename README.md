@@ -44,7 +44,7 @@
 ## 需求:
 1. 每次变化的值有两个, 验证码和 Hash
    ```
-      yzm	64063510
+   yzm	64063510
    hash	1547c50b16cbfc974c778b4a10838236_5cae98a2e901afed5cb12214ea3751e7
    ```
 
@@ -52,11 +52,11 @@
    ```html
    <meta name="hash" content="1547c50b16cbfc974c778b4a10838236_55bdbb7cb9190c41db2ce3449bdce0dc">
    ```
-   Hash 的前半段 1547c50b16cbfc974c778b4a10838236 是固定的
-   Hash 的后半段 55bdbb7cb9190c41db2ce3449bdce0dc 直到提交查询前, 刷新多少次都不会再变
+   - hash 的前半段 `1547c50b16cbfc974c778b4a10838236` 是固定的
+   - hash 的后半段 `55bdbb7cb9190c41db2ce3449bdce0dc` 直到提交查询前, 刷新多少次都不会再变
 
 3. 验证码可以请求 API 识别, 准确率接近 100%
-   验证码的图片是 http://zsb.jlu.edu.cn/index/verify/tp/1.html 每次请求都会变化
+   - 验证码图片是 http://zsb.jlu.edu.cn/index/verify/tp/1.html 每次请求都会变化
 
    ```
    <img src="/index/verify/tp/1.html" class="img-rounded" onclick="this.src+='?' + Math.random();" style="cursor:pointer;" title="点击图片刷新验证码">
