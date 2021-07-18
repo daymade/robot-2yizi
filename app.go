@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/blinkbean/dingtalk"
@@ -42,9 +43,14 @@ func main() {
 
 	message := "没有查询到你的信息"
 	times := 0
+	messageTime, err := time.Parse(time.RFC3339, "2021-07-18T11:25:10.000+08:00")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// 每隔 5 分钟查询一次, 如果结果没变化在一小时内不会发送重复消息
 	for {
-		scrape(&message, &times)
+		scrape(&message, &messageTime, &times)
 		time.Sleep(5 * time.Minute)
 	}
 }
@@ -55,7 +61,7 @@ func main() {
 //3. 获取验证码图片 base64 之后请求 API 识别, 获取一串数字结果
 //4. 请求 http://zsb.jlu.edu.cn/index/gkcxresult.html , 提取响应结果 `.system-message`>
 //5. 将结果发送到钉钉的 Webhook.
-func scrape(lastMessage *string, duplicatedTimes *int) {
+func scrape(prevResult *string, lastMessageTime *time.Time, duplicatedTimes *int) {
 	client := getClient()
 
 	hash := getHash(client)
@@ -65,19 +71,18 @@ func scrape(lastMessage *string, duplicatedTimes *int) {
 	fmt.Printf("verificationCode: %s\n", verificationCode)
 
 	//5. 请求 http://zsb.jlu.edu.cn/index/gkcxresult.html , 提取响应结果 `.system-message`> DONE
-	message := queryResult(client, verificationCode, hash)
-	fmt.Println(fmt.Sprintf("time: %s, message: %s", time.Now(), message))
+	result := queryResult(client, verificationCode, hash)
+	fmt.Println(fmt.Sprintf("time: %s, result: %s", time.Now().Format(time.RFC3339), result))
 
-	// 加上接口请求时间大概是 60 分钟
-	if *duplicatedTimes < 12 {
-		if *lastMessage == message {
+	if time.Now().Sub(*lastMessageTime).Seconds() < (1 * time.Hour).Seconds() {
+		if *prevResult == result {
 			*duplicatedTimes++
 
 			fmt.Printf("和上次查询结果相同, 不发送消息, 已重复 %d 次\n", *duplicatedTimes)
 			return
 		}
 
-		if strings.Contains(message, "验证码输入错误") {
+		if strings.Contains(result, "验证码输入错误") {
 			*duplicatedTimes++
 
 			fmt.Println("验证码错误")
@@ -86,10 +91,11 @@ func scrape(lastMessage *string, duplicatedTimes *int) {
 	}
 
 	// 沉默了一小时, 或者有新的结果
-	*lastMessage = message
+	*prevResult = result
+	*lastMessageTime = time.Now()
 	*duplicatedTimes = 0
 
-	send(message)
+	send(result)
 }
 
 func getClient() *http.Client {
@@ -244,7 +250,7 @@ func queryResult(client *http.Client, verificationCode string, hash string) stri
 	return mapped(message)
 }
 
-func identifyCode(client *http.Client, base64Str string) string {
+func identifyCode(client *http.Client, base64Str string) (string, error) {
 	params := url.Values{}
 	params.Add("image", base64Str)
 	params.Add("maxlength", `8`)
@@ -295,41 +301,42 @@ func identifyCode(client *http.Client, base64Str string) string {
 	}
 
 	if r.Code != 0 {
-		log.Fatal(fmt.Sprintf("识别验证码失败, 响应: %s", bodyStr))
+		return "", errors.New(fmt.Sprintf("识别验证码失败, 响应: %s\n", bodyStr))
 	}
 
-	return r.Data.Captcha
+	return r.Data.Captcha, nil
 }
 
 // 6. 将结果发送到钉钉的 Webhook.
-func send(message string) {
+func send(result string) {
 	robot := dingtalk.InitDingTalk([]string{dingToken}, "")
 
 	err := robot.SendMarkDownMessage("查询结果", fmt.Sprintf(
 		`
 %s, 查询结果: 
+
 %s
 
 > 每隔 5 分钟查询一次
 > 
 > 如果结果没变化, 一小时内不会发送重复消息
-`, time.Now().Format(time.Kitchen), message))
+`, time.Now().Format(time.Kitchen), result))
 
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func mapped(message string) string {
-	if strings.Contains(message, "没有查询到你的信息") {
+func mapped(result string) string {
+	if strings.Contains(result, "没有查询到你的信息") {
 		return "没有查询到你的信息"
 	}
 
-	if strings.Contains(message, "验证码输入错误") {
+	if strings.Contains(result, "验证码输入错误") {
 		return "验证码输入错误"
 	}
 
-	return message
+	return result
 }
 
 type CodeResponse struct {
