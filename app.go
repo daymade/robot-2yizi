@@ -137,7 +137,12 @@ func getVerificationCode(client *http.Client) string {
 
 	fmt.Println(base64Str)
 
-	verificationCode := identifyCode(client, base64Str)
+	verificationCode, err := identifyCode(client, base64Str)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
 	return verificationCode
 }
 
