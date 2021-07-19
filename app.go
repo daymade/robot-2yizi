@@ -43,15 +43,15 @@ func main() {
 
 	message := "没有查询到你的信息"
 	times := 0
-	messageTime, err := time.Parse(time.RFC3339, "2021-07-18T11:25:10.000+08:00")
+	messageTime, err := time.Parse(time.RFC3339, "2021-07-19T12:57:00.000+08:00")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 每隔 5 分钟查询一次, 如果结果没变化在一小时内不会发送重复消息
+	// 每隔 15 分钟查询一次, 如果结果没变化在一小时内不会发送重复消息
 	for {
 		scrape(&message, &messageTime, &times)
-		time.Sleep(5 * time.Minute)
+		time.Sleep(15 * time.Minute)
 	}
 }
 
@@ -241,13 +241,24 @@ func queryResult(client *http.Client, verificationCode string, hash string) stri
 		log.Fatal(err)
 	}
 
-	message := doc.Find(".system-message").Text()
-
-	if message == "" {
-		log.Fatal("提取响应失败")
+	// 未查询到结果
+	errorMessage := doc.Find(".system-errorMessage").Text()
+	if errorMessage != "" {
+		return mapped(errorMessage)
 	}
 
-	return mapped(message)
+	// 成功
+	ems := "尚未寄出"
+	doc.Find("td").Each(func(i int, s *goquery.Selection) {
+		if left := s.Text(); strings.Contains(left, "EMS编号：") {
+			value := s.Next().Text()
+			if value != "" {
+				ems = value
+			}
+		}
+	})
+
+	return fmt.Sprintf("EMS编号: %s", ems)
 }
 
 func identifyCode(client *http.Client, base64Str string) (string, error) {
@@ -317,7 +328,7 @@ func send(result string) {
 
 %s
 
-> 每隔 5 分钟查询一次
+> 每隔 15 分钟查询一次
 > 
 > 如果结果没变化, 一小时内不会发送重复消息
 `, time.Now().Format(time.Kitchen), result))
